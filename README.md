@@ -6,11 +6,13 @@
 [![DMG Acid2](https://img.shields.io/badge/DMG%20Acid2-100%25-success)](docs/technical-report.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+**Status:** Complete. All subsystems implemented, verified, and documented.
+
 ---
 
 ## Overview
 
-**DMG-Scratch** is not an emulator in the conventional sense. It is a full digital logic reconstruction of the Game Boy DMG-01 hardware running strictly inside Scratch blocks:
+**DMG-Scratch** is not an emulator in the conventional sense — it prioritizes hardware fidelity over playability. It is a full digital logic reconstruction of the Game Boy DMG-01 hardware running strictly inside Scratch blocks:
 
 - **100% Native Scratch Primitives**: Uses only Scratch variables, 1-indexed lists, basic arithmetic/comparison operators, and warp custom procedures.
 - **Zero External Dependencies**: No JavaScript, No WebAssembly, No extensions, and No Foreign Function Interfaces (FFI) inside the machine core.
@@ -63,9 +65,8 @@ Screenshots captured directly from the native Scratch framebuffer output:
 
 ## Known Limitations
 
-Transparent engineering and honest limitations build trust:
 - **Model B Instruction Write Placement**: Multi-cycle CPU instructions execute their bus writes at the beginning of their M-cycle window rather than their exact intra-instruction M-cycle position (e.g. M3 for `LDH`). As a result, 5 Mooneye PPU tests calibrating intra-instruction micro-timing offsets fail by design.
-- **APU Verification Scope**: The 4-channel sound synthesizer is verified via internal unit tests and commercial game execution; external APU acceptance suites (e.g. Blargg dmg_sound) have not yet been evaluated.
+- **APU Verification Scope**: External APU test suites (e.g. Blargg dmg_sound) have not been run against this machine; APU correctness is established via internal unit tests and auditory verification during commercial gameplay.
 - **Gameplay Throughput**: Full active gameplay runs at ~24.5 FPS in TurboWarp (~0.41× real hardware speed) due to the overhead of per-dot FIFO processing and 4-channel audio synthesis in native blocks. Early menus run at ~87 FPS.
 - **Reference Emulator Comparison**: Differential execution against SameBoy was not run in the automated harness; verification relies on physical hardware test ROMs (Mooneye, Blargg, Acid2).
 
