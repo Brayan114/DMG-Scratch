@@ -1,7 +1,7 @@
 # Reconstructing the Game Boy DMG-01 in Native Scratch: Architecture, Mechanics, and Hardware Fidelity
 
 **Project:** DMG-Scratch  
-**Author:** Project DMG-Scratch Architectural Team  
+**Author:** Brayan Osinaka  
 **Hardware Target:** Nintendo Game Boy DMG-01 (SoC Revision: DMG-CPU B)  
 **Deliverable:** Hardware Reconstruction Model in Native Scratch Blocks (`.sb3`)  
 **Date:** September 2026  
