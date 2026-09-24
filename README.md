@@ -1,9 +1,10 @@
-﻿# DMG-Scratch
+# DMG-Scratch
 
 **A cycle-accurate hardware reconstruction of the Nintendo Game Boy DMG-01 (DMG-CPU B) implemented entirely in native Scratch 3.0 blocks.**
 
 [![Mooneye 18/18](https://img.shields.io/badge/Mooneye%20GB-18%2F18-success)](docs/technical-report.md)
 [![DMG Acid2](https://img.shields.io/badge/DMG%20Acid2-100%25-success)](docs/technical-report.md)
+[![Environment: TurboWarp](https://img.shields.io/badge/Environment-TurboWarp-orange.svg)](https://turbowarp.org/editor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **Status:** Complete. All subsystems implemented, verified, and documented.
@@ -21,6 +22,14 @@
   - 100% Pass (23,040 / 23,040 pixels) on Matt Currie's **DMG Acid2** PPU benchmark.
   - Complete pass across Mooneye-GB acceptance suites (Timer 13/13, OAM DMA 3/3, Boot registers, STAT IRQ blocking).
   - Commercial game verification running full sessions of **Tetris** and **Super Mario Land** with real-time interactive controls.
+
+---
+
+## Requirements
+
+Runs in **[TurboWarp](https://turbowarp.org/editor)** (or the Scratch editor with **"Turbo Mode"** enabled). 
+
+Vanilla Scratch running without Turbo Mode at 30 FPS is too slow to execute the millions of discrete dot-by-dot logic operations per second required for real-time play.
 
 ---
 
