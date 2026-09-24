@@ -1,4 +1,4 @@
-﻿# Architectural Design Notes: DMG-Scratch
+# Architectural Design Notes: DMG-Scratch
 
 This document highlights 15 key architectural and hardware engineering decisions made during the reconstruction of the Nintendo Game Boy DMG-01 (DMG-CPU B) in native Scratch 3.0 blocks.
 
@@ -37,13 +37,13 @@ Interrupt servicing models the physical 5 M-cycle silicon pipeline:
 The timer counter increments synchronously with an internal 16-bit master counter. Frequency selection uses a hardware multiplexer whose output signal feeds a falling-edge detector. Resetting DIV or modifying TAC bits during specific counter phases reproduces exact silicon hardware glitches (instantaneous TIMA increments).
 
 ### 9. Two-Cycle Timer Overflow Pipeline
-TIMA overflow from  does not immediately trigger an interrupt. For 1 M-cycle (Cycle A), TIMA reads . On the subsequent M-cycle (Cycle B), TIMA reloads from TMA and asserts the Timer IRQ. Writes during Cycle A cancel the reload; writes to TIMA during Cycle B are ignored.
+TIMA overflow from $FF does not immediately trigger an interrupt. For 1 M-cycle (Cycle A), TIMA reads $00. On the subsequent M-cycle (Cycle B), TIMA reloads from TMA and asserts the Timer IRQ. Writes during Cycle A cancel the reload; writes to TIMA during Cycle B are ignored.
 
 ### 10. OAM DMA 161 M-Cycle Transfer & Bus Lockout
-Writing to  initiates a 161 M-cycle transfer (1 setup M-cycle + 160 copy M-cycles) that copies 160 bytes from the source page to OAM at 1 byte per M-cycle. During this transfer, access to external bus regions is blocked while HRAM remains executable.
+Writing to $FF46 initiates a 161 M-cycle transfer (1 setup M-cycle + 160 copy M-cycles) that copies 160 bytes from the source page to OAM at 1 byte per M-cycle. During this transfer, access to external bus regions is blocked while HRAM remains executable.
 
 ### 11. Dot-by-Dot PPU State Machine & Dynamic Mode 3 Penalties
-The PPU does not advance in scanline batches. It steps dot-by-dot through Mode 2 (OAM Search, 80 dots), Mode 3 (Drawing, 172+ dots base), Mode 0 (HBlank), and Mode 1 (VBlank). Mode 3 duration adjusts dynamically according to fine scroll ( mod 8$), window activation, and sprite fetch penalties.
+The PPU does not advance in scanline batches. It steps dot-by-dot through Mode 2 (OAM Search, 80 dots), Mode 3 (Drawing, 172+ dots base), Mode 0 (HBlank), and Mode 1 (VBlank). Mode 3 duration adjusts dynamically according to fine scroll (`SCX mod 8`), window activation, and sprite fetch penalties.
 
 ### 12. PPU Pixel FIFO Multiplexing
 Background, window, and sprite pixels are streamed into internal 8-pixel FIFO lists. Mode 3 advances only when the background FIFO contains sufficient pixels. Sprites are fetched during Mode 3, matched by X-coordinate, and merged based on priority and palette attributes.
@@ -55,9 +55,9 @@ DMG STAT interrupt sources (LY=LYC, Mode 2, Mode 1, Mode 0) are combined through
 The Audio Processing Unit implements all four sound channels (Pulse 1 with sweep, Pulse 2, 32-sample Wave, and LFSR Noise). Timing is driven by a 512 Hz frame sequencer clocked from the master timer counter, stepping length counters (256 Hz), frequency sweep (128 Hz), and volume envelopes (64 Hz).
 
 ### 15. Standard Active-Low Joypad Matrix & Interactive Keyboard Polling
-The joypad registers () model the authentic active-low 2×4 matrix (P14 selects D-Pad, P15 selects action buttons). Keyboard input from native Scratch sensing blocks is mapped directly to the matrix:
+The joypad registers ($FF00) model the authentic active-low 2×4 matrix (P14 selects D-Pad, P15 selects action buttons). Keyboard input from native Scratch sensing blocks is mapped directly to the matrix:
 - **Right / Left / Up / Down**: Arrow keys
 - **A / B**: Z / X
 - **Start**: E
 - **Select**: Space / S
-Transitions on the matrix input lines trigger the high-to-low falling edge Joypad interrupt ().
+Transitions on the matrix input lines trigger the high-to-low falling edge Joypad interrupt ($60).

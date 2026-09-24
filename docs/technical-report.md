@@ -42,7 +42,7 @@ This document serves as the complete technical whitepaper and architectural refe
 ## 1. Architectural Philosophy & Hard Constraints
 
 ### 1.1 The Machine vs. The Emulator
-The core tenet governing this project is formalized in `the project design charter`:
+The core tenet governing this project is established as a foundational principle:
 > *"The deliverable is a machine, not an emulator. The emulator is merely the environment in which the reconstructed machine happens to execute."*
 
 A conventional emulator prioritizes functional playability, often relying on bulk advancement of time (e.g., executing an entire CPU instruction and advancing peripheral timers by 4 to 24 clock cycles in a single step), heuristic hacks to bypass hardware timing corner cases, or frame-skipping optimizations. 
@@ -76,10 +76,10 @@ f_{\text{M-cycle}} &= \frac{f_{\text{dot}}}{4} = 1,048,576\text{ Hz} \quad (T_{\
 f_{\text{frame}} &= \frac{4,194,304}{70,224} \approx 59.72750056\text{ Hz}
 \end{aligned}$$
 
-### 2.2 Frame Pacing in Scratch (Design Decision)
+### 2.2 Frame Pacing in Scratch
 Scratch custom blocks configured with the *Run without screen refresh* (warp) attribute execute synchronously within the current Scratch engine step. However, if a warp script runs indefinitely without yielding, the Scratch VM triggers an internal execution watchdog or drops framerates to 0 FPS. Conversely, if a script yields on every dot or every M-cycle, the host runtime clamps execution to 30 or 60 yields per second, producing an effective speed of 60 dots per second—rendering the machine non-functional.
 
-DMG-Scratch solves this impedance mismatch through the frame-pacing architecture formalized in **Design Decision**:
+DMG-Scratch solves this impedance mismatch through the frame-pacing architecture formalized as a core architectural pattern:
 - The outer Stage script executes a `forever` loop that aligns precisely with the host screen refresh boundary.
 - Inside this loop, the engine invokes `step_system_frame`, which encapsulates an inner `repeat (70224)` loop calling `step_system_tick`.
 - During headless high-throughput testing, `run_mode` triggers a `repeat (50)` loop of `step_system_frame` per engine tick, allowing headless runners to advance thousands of frames in seconds.
@@ -112,7 +112,7 @@ By binding CPU, DMA, APU, and Timer advancements strictly to the condition `(CLK
 
 ## 3. Memory Bus & Fast Bitwise Primitives
 
-### 3.1 The Memory Bus Tree (Decisions Design Decision, Design Decision, Design Decision)
+### 3.1 The Memory Bus Tree (Hybrid Bus Architecture)
 The Game Boy address space spans $65,536\text{ bytes}$ ($0x0000$ to $0xFFFF$). In Scratch, list index lookups are relatively fast, but dynamic memory decoding across fragmented address spaces (ROM bank 0, switched ROM bank, VRAM, external Cartridge RAM, WRAM bank 0, WRAM bank 1, Echo RAM, OAM, I/O registers, and HRAM) requires high conditional branching efficiency.
 
 A flat sequence of `if / else if` blocks evaluating 12 different memory regions sequentially would incur an average cost of 6 to 8 string/number comparisons per memory access. In a machine issuing multiple reads and writes per M-cycle, this naive approach would devastate performance.
@@ -140,7 +140,7 @@ Physical DMG silicon enforces rigid memory isolation depending on subsystem stat
 
 DMG-Scratch models every lockout condition explicitly within `bus_read` and `bus_write`.
 
-### 3.2 O(1) Bitwise Arithmetic Tables (Design Decision)
+### 3.2 O(1) Bitwise Arithmetic Tables
 Standard Scratch provides no native bitwise operators: no bitwise AND (`&`), OR (`|`), XOR (`^`), NOT (`~`), or bit shifts (`<<`, `>>`). Simulating an 8-bit bitwise operation by looping across 8 bit positions using powers of two would require dozens of block executions per byte, creating an insurmountable bottleneck in the ALU and PPU.
 
 DMG-Scratch solves this fundamentally through **precomputed mathematical lookup tables** embedded directly into the project JSON:
@@ -171,12 +171,12 @@ Decomposition is handled via `cpu_set_bc`, `cpu_set_de`, `cpu_set_hl`, and `cpu_
 #### Invariant 1: Flag Register Lower Nibble Zeroing
 On physical DMG hardware, bits 3–0 of the `F` register are electrically tied to ground. They can never hold a logic high state under any circumstance—even when arbitrary values are popped from the stack via `POP AF`.
 
-To ensure this invariant holds unconditionally, **Design Decision** strictly forbids direct writes to `reg_F`. All updates must flow through `cpu_set_f` or `cpu_set_af`, which enforce:
+To ensure this invariant holds unconditionally, the CPU architecture strictly forbids direct writes to `reg_F`. All updates must flow through `cpu_set_f` or `cpu_set_af`, which enforce:
 $$\text{reg\_F} = \lfloor \frac{\text{val} \bmod 256}{16} \rfloor \times 16$$
 Bits 3, 2, 1, and 0 are permanently forced to zero.
 
 ### 4.2 Instruction Decoding Pipeline
-The SM83 instruction set encompasses 256 base opcodes and 256 `$CB`-prefixed opcodes. DMG-Scratch decodes all 512 opcodes using a structured bitfield decomposition algorithm (**Design Decision**) based on the octal bit patterns $(x, y, z, p, q)$:
+The SM83 instruction set encompasses 256 base opcodes and 256 `$CB`-prefixed opcodes. DMG-Scratch decodes all 512 opcodes using a structured bitfield decomposition algorithm based on the octal bit patterns $(x, y, z, p, q)$:
 
 $$\begin{aligned}
 x &= \lfloor \frac{\text{Opcode}}{64} \rfloor \\
@@ -228,15 +228,15 @@ The DMG-CPU B features a 5-source prioritized interrupt controller:
 4. **Bit 3 ($0x08$, Vector `$0058`):** Serial Transfer Complete
 5. **Bit 4 ($0x10$, Vector `$0060`):** Joypad High-to-Low Transition (Lowest priority)
 
-#### 5 M-Cycle Dispatch Sequence (Design Decision)
-When an interrupt is triggered and the Interrupt Master Enable flag (`CPU_IME`) is active, the CPU halts regular instruction fetch and initiates a 5 M-cycle hardware dispatch sequence:
+#### 5 M-Cycle Dispatch Sequence
+When an interrupt is triggered and the Interrupt Master Enable flag (`IME`) is active, the CPU halts regular instruction fetch and initiates a 5 M-cycle hardware dispatch sequence:
 - **M-Cycles 1 & 2:** Internal synchronization and wait states (2 M-cycles).
 - **M-Cycle 3:** High byte of `PC` is written to `[--SP]`.
 - **M-Cycle 4:** Low byte of `PC` is written to `[--SP]`.
-- **M-Cycle 5:** Target interrupt vector address is loaded into `PC`, `CPU_IME` is cleared, and the corresponding bit in `reg_IF` is reset.
+- **M-Cycle 5:** Target interrupt vector address is loaded into `PC`, `IME` is cleared, and the corresponding bit in `reg_IF` is reset.
 
 #### EI Delay & The HALT Bug
-- **EI Delay:** Enabling interrupts via the `EI` instruction does not assert `CPU_IME` immediately; it latches `CPU_EI_Delay = 1`. `CPU_IME` is asserted only *after* the instruction following `EI` completes.
+- **EI Delay:** Enabling interrupts via the `EI` instruction does not assert `IME` immediately; it activates a 1-instruction delay. `IME` is asserted only *after* the instruction following `EI` completes.
 - **The HALT Bug:** When the CPU executes `HALT` while `CPU_IME = 0` but an interrupt is already pending (`(reg_IE & reg_IF & 0x1F) != 0`), the CPU does not halt. Instead, the instruction immediately following `HALT` fails to increment `PC` during its $M_1$ fetch, causing the first byte of that instruction to be read twice. DMG-Scratch replicates this hardware quirk with exact fidelity.
 
 ---
@@ -258,7 +258,7 @@ Active Scanline (0..143): 456 Dots Total
   $$\text{Duration}_{\text{Mode 0}} = 376 - \text{Duration}_{\text{Mode 3}}$$
   The sum of Mode 2, Mode 3, and Mode 0 on any active scanline is invariant: exactly 456 dots.
 
-### 5.2 The 5-Step Background Fetcher Pipeline (Architecture Specification Section , Design Decision)
+### 5.2 The 5-Step Background Fetcher Pipeline
 Rather than blitting pre-rendered tiles or scanlines in bulk, DMG-Scratch models the 5-step hardware pixel fetcher. The fetcher operates on an 8-dot (2-dot per step) clock cycle:
 1. **Step 1 (Dots 1–2): Get Tile Index:** Reads tile map index from VRAM ($9800–9BFF$ or $9C00–9FFF$) based on current $(SCX, SCY)$ and scanline $LY$.
 2. **Step 2 (Dots 3–4): Get Tile Data Low:** Fetches the least significant bitplane byte of the tile from VRAM.
@@ -276,7 +276,7 @@ When the Window is enabled (`reg_LCDC` bit 5) and the current beam reaches $(WX 
 - The fetcher redirects to the Window tile map.
 - An internal Window Line Counter increments only on scanlines where the window is actually rendered, ensuring vertical continuity across window regions.
 
-### 5.5 Sprite Fetcher & DMG X-Coordinate Priority Sorting (Design Decision)
+### 5.5 Sprite Fetcher & DMG X-Coordinate Priority Sorting
 When the horizontal pixel coordinate matches an active sprite's $X$-position ($X = \text{Sprite}_X$):
 - PPU pixel emission freezes.
 - The sprite fetcher executes a 6-dot memory read to retrieve the sprite's low and high bitplanes from VRAM.
@@ -299,7 +299,7 @@ At every dot during Mode 3, provided the fetcher is not stalled:
 
 ## 6. The Audio Processing Unit (APU) & 512 Hz Frame Sequencer
 
-### 6.1 APU Architecture Overview (Architecture Specification Section , Decisions Design Decision to Design Decision)
+### 6.1 APU Architecture Overview (4-Channel Sound Generator)
 The DMG-CPU B APU consists of four independent sound synthesis channels mixed into stereo left/right audio terminals ($SO1, SO2$):
 - **Channel 1 (Pulse with Sweep):** Programmable frequency sweep, duty cycle (12.5%, 25%, 50%, 75%), volume envelope, and length counter.
 - **Channel 2 (Pulse):** Identical to Channel 1, lacking frequency sweep.
@@ -357,7 +357,7 @@ Register `NR52` ($FF26$) controls master sound power. When bit 7 of `NR52` is cl
 
 ## 7. Peripheral Subsystems: Timer, OAM DMA, Joypad, Serial, & MBC
 
-### 7.1 The Programmable Timer Subsystem (Design Decision)
+### 7.1 The Programmable Timer Subsystem
 The Game Boy timer consists of:
 - Internal 16-bit System Counter (upper 8 bits exposed as `reg_DIV` at `$FF04`).
 - `reg_TIMA` ($FF05$): Timer Counter.
@@ -389,12 +389,12 @@ When `TIMA` reaches `$FF` and increments, it does not reload from `TMA` immediat
 
 DMG-Scratch models this 2-cycle pipeline state machine, passing all 13 Mooneye timer acceptance tests.
 
-### 7.2 OAM DMA Controller (Design Decision)
+### 7.2 OAM DMA Controller
 Writing a page address `$XX` to `reg_DMA` ($FF46$) initiates an automated Direct Memory Access transfer copying 160 bytes from source address `$XX00 \dots XX9F$` directly into OAM ($FE00 \dots FE9F$).
 - **Transfer Duration:** Exactly 160 M-cycles (preceded by a 1 M-cycle bus synchronization delay, totaling 161 M-cycles).
 - **Bus Lockout:** During transfer, the CPU cannot access Cartridge ROM, VRAM, or WRAM; any read returns open-bus `$FF`. The CPU is restricted entirely to HRAM (`$FF80–FFFE`).
 
-### 7.3 Joypad Subsystem & Matrix Polling (Design Decision)
+### 7.3 Joypad Subsystem & Matrix Polling
 The Game Boy joypad ($FF00$) uses an active-low $2 \times 4$ matrix:
 - **Bit 5 (P15):** Select Action buttons (Start, Select, B, A).
 - **Bit 4 (P14):** Select Direction buttons (Down, Up, Left, Right).
@@ -403,7 +403,7 @@ The Game Boy joypad ($FF00$) uses an active-low $2 \times 4$ matrix:
 #### Active-Low Joypad Edge Interrupts
 A joypad interrupt (Bit 4 of `reg_IF`) is triggered when any joypad input line transitions from high to low ($1 \to 0$). If a button is held down while the CPU toggles the selection lines (switching between `$10` and `$20`), the multiplexed input nibble flips, generating valid falling edges that trigger genuine hardware joypad IRQs.
 
-### 7.4 Cartridge Memory Bank Controllers (MBC) (Design Decision)
+### 7.4 Cartridge Memory Bank Controllers (MBC)
 DMG-Scratch incorporates complete memory mapping logic for commercial cartridges:
 - **ROM-Only (32 KiB):** Fixed 16 KiB bank 0 ($0000–3FFF$) and fixed 16 KiB bank 1 ($4000–7FFF$).
 - **MBC1 (Up to 2 MiB ROM / 32 KiB RAM):**
@@ -417,7 +417,7 @@ DMG-Scratch incorporates complete memory mapping logic for commercial cartridges
 
 ## 8. Programmatic AST Compilation Toolchain
 
-### 8.1 Why Hand-Authoring .sb3 Is Impossible (Design Decision)
+### 8.1 Why Hand-Authoring .sb3 Is Impossible
 A complete cycle-accurate DMG machine core contains:
 - 128 variables and lists
 - 84 custom procedures (`procedures_definition` / `procedures_prototype`)
@@ -545,7 +545,7 @@ Execution throughput was measured during active commercial gameplay:
 - **Early Boot & Sparse Menus:** $\sim 87\text{ FPS}$ ($1.46\times$ real hardware speed).
 - **Active Gameplay (Tetris & Super Mario Land):** $\sim 24.5\text{ FPS}$ ($0.41\times$ real hardware speed).
 
-As documented in **Design Decision**, 24.5 FPS is sustained indefinitely across tens of thousands of frames. In a block-based visual programming environment evaluating over 4.19 million discrete master clock ticks per simulated second, achieving $\sim 25\text{ FPS}$ in native blocks represents an unprecedented performance achievement.
+As documented in Section 11.3, 24.5 FPS is sustained indefinitely across tens of thousands of frames. In a block-based visual programming environment evaluating over 4.19 million discrete master clock ticks per simulated second, achieving $\sim 25\text{ FPS}$ in native blocks represents an unprecedented performance achievement.
 
 ### 11.2 Input-to-Display Latency
 Using automated frame-accurate input injection, latency was measured from the exact frame a joypad register was asserted to the frame where the framebuffer altered:
@@ -570,28 +570,30 @@ During the continuous **10,007-frame long-run stability audit** of *Tetris*:
 
 ## 12. Summary of Non-Trivial Architectural Decisions
 
-The complete design history of Project DMG-Scratch is preserved in `the architectural design log`. Below is an overview of the critical architectural milestones:
+The complete design history of Project DMG-Scratch is preserved in [Design Notes](design-notes.md). Below is an overview of the critical architectural milestones:
 
 | Decision ID | Subsystem | Core Architectural Innovation |
 | :--- | :--- | :--- |
-| **Design Decision** | Toolchain | Programmatic AST builder in Node.js targeting stock Scratch 3 schema. |
-| **Design Decision** | Master Loop | Frame pacing structure: `repeat (70224)` per host screen refresh. |
-| **Design Decision** | CPU | Scalar 8-bit registers; dynamic 16-bit pair synthesis; strict `reg_F mod 16 == 0` masking. |
-| **Design Decision** | Memory Bus | Model C hybrid storage: hot video/timer I/O as scalar variables; others in list. |
-| **Design Decision** | ALU | Precomputed 65,536-entry bitwise tables (`LUT_AND`, `LUT_OR`, `LUT_XOR`) for $O(1)$ ops. |
-| **Design Decision** | Bus Routing | Balanced binary search tree memory decoder; worst-case depth $\le 4$. |
-| **Design Decision** | Decoder | Octal bitfield $(x, y, z, p, q)$ instruction dispatch tree. |
-| **Design Decision** | Interrupts | 5 M-cycle hardware dispatch sequence and `EI` 1-instruction delay latch. |
-| **Design Decision** | Timer | Falling-edge multiplexer architecture; DIV/TAC glitches; 1 M-cycle reload window. |
-| **Design Decision** | DMA | 161 M-cycle OAM DMA engine with CPU bus lockout and HRAM isolation. |
-| **Design Decision** | Cartridge | Unified MBC1, MBC2, MBC3, MBC5 banking engines. |
-| **Design Decision** | PPU | 5-step background pixel fetcher pipeline and FIFO state machine. |
-| **Design Decision** | PPU | 10-sprite per-scanline limit with DMG X-coordinate priority sorting. |
-| **Design Decision** | PPU | Dynamic Mode 3 duration penalties ($SCX \bmod 8$, window, sprite fetch stalls). |
-| **Design Decision** | APU | 512 Hz Frame Sequencer driven by System Counter bit 12 falling edges. |
-| **Design Decision** | Input | Decoupled host input script injection at frame boundaries. |
-| **Design Decision** | Performance | Baseline gameplay throughput established at $\sim 24.5\text{ FPS}$; 1-frame latency. |
-| **Design Decision** | Commercial | Super Mario Land verification: MBC1 banking, horizontal scroll, OAM meta-sprites. |
+| Subsystem | Area | Core Architectural Innovation |
+| :--- | :--- | :--- |
+| **Toolchain** | Code Generation | Programmatic AST builder in Node.js targeting stock Scratch 3 schema. |
+| **Master Loop** | Execution Engine | Frame pacing structure: `repeat (70224)` per host screen refresh. |
+| **CPU Core** | Registers | Scalar 8-bit registers; dynamic 16-bit pair synthesis; strict `reg_F mod 16 == 0` masking. |
+| **Memory Bus** | Address Routing | Hybrid storage: hot video/timer I/O as scalar variables; others in list. |
+| **ALU Core** | Bitwise Logic | Precomputed 65,536-entry bitwise tables (`LUT_AND`, `LUT_OR`, `LUT_XOR`) for $O(1)$ ops. |
+| **Bus Routing** | Optimization | Balanced binary search tree memory decoder; worst-case depth $\le 4$. |
+| **Decoder** | Instruction Set | Octal bitfield $(x, y, z, p, q)$ instruction dispatch tree. |
+| **Interrupts** | Dispatch Timing | 5 M-cycle hardware dispatch sequence and `EI` 1-instruction delay latch. |
+| **Timer** | Silicon Glitches | Falling-edge multiplexer architecture; DIV/TAC glitches; 1 M-cycle reload window. |
+| **DMA Engine** | Bus Arbitration | 161 M-cycle OAM DMA engine with CPU bus lockout and HRAM isolation. |
+| **Cartridge** | Banking Engines | Unified MBC1, MBC2, MBC3, MBC5 banking engines. |
+| **PPU Pipeline** | Pixel Fetcher | 5-step background pixel fetcher pipeline and FIFO state machine. |
+| **PPU Pipeline** | Sprite Priority | 10-sprite per-scanline limit with DMG X-coordinate priority sorting. |
+| **PPU Pipeline** | Mode 3 Pacing | Dynamic Mode 3 duration penalties ($SCX \bmod 8$, window, sprite fetch stalls). |
+| **APU Subsystem**| Sound Synthesis | 512 Hz Frame Sequencer driven by System Counter bit 12 falling edges. |
+| **Host Input** | Joypad Matrix | Standard active-low matrix reading with keyboard polling at frame boundaries. |
+| **Performance** | Stability Audit | Sustained gameplay throughput at $\sim 24.5\text{ FPS}$; 1-frame latency. |
+| **Commercial** | Cartridge Verification | Super Mario Land verification: MBC1 banking, horizontal scroll, OAM meta-sprites. |
 
 ---
 
@@ -601,9 +603,9 @@ Project DMG-Scratch proves conclusively that high-fidelity, cycle-accurate hardw
 
 ### Archival Artifact Locations
 - **Machine Project Archive:** `sb3-template/machine-base.sb3` (Opens directly in TurboWarp)
-- **Authoritative Machine Specification:** `docs/09_architecture_spec_v1.0.md`
-- **Architectural Decision Record:** `the architectural design log`
-- **As-Built Test Suite Harness:** `scratch/run_phase7_1_asbuilt.js`
-- **Visual Capture Artifacts:** `demo-artifacts/` (`tetris_title.bmp`, `tetris_gameplay.bmp`, `sml_title.bmp`, `sml_gameplay.bmp`)
+- **Authoritative Machine Specification:** `docs/technical-report.md`
+- **Architectural Decision Record:** [Design Notes](design-notes.md)
+- **As-Built Test Suite Harness:** `automated test harness`
+- **Visual Capture Artifacts:** `demo-artifacts/` (`tetris_title.png`, `tetris_gameplay.png`, `sml_title.png`, `sml_gameplay.png`)
 
 The machine is complete, verified, and operational.
